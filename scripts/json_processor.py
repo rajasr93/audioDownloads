@@ -14,8 +14,10 @@ class PlaylistProcessor:
     def _clean_song_name(self, song: str) -> str:
         """Cleans the song name by removing timestamps and ID entries."""
         # Remove timestamps (XX:XX)
+        song = re.sub(r'[\[\]\(\)\{\}]', '', song)
         song = re.sub(r'^\d{1,2}:?\d{2}:?\d{2}\s*', '', song)
         song = re.sub(r'^\d{1,2}:?\d{2}\s*', '', song)
+        
         
         # Remove ID entries
         if song.strip() == "ID - ID":

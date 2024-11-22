@@ -3,3 +3,4 @@ mutagen==1.46.0
 Pillow
 requests==2.31.0
 yt-dlp~=2024.4.9
+youtube_search
