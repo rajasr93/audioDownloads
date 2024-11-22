@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Music Downloader</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.js"></script>
+    <style>
+        .section {
+            margin: 2rem 0;
+            padding: 1.5rem;
+            border: 1px solid #e5e7eb;
+            border-radius: 0.5rem;
+        }
+        .input-group {
+            margin: 1rem 0;
+        }
+        .status {
+            margin-top: 1rem;
+            padding: 0.5rem;
+            border-radius: 0.25rem;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <div class="container mx-auto px-4 py-8 max-w-3xl">
+        <h1 class="text-3xl font-bold mb-8 text-center">YouTube Music Downloader</h1>
+        
+        <div id="app"></div>
+
+        <div class="section bg-white shadow-sm">
+            <h2 class="text-xl font-semibold mb-4">Single Song Download</h2>
+            <div class="input-group">
+                <input type="text" id="songInput" placeholder="Enter song name" 
+                       class="w-full p-2 border rounded mb-2">
+                <button onclick="downloadSong()" 
+                        class="w-full bg-blue-500 text-white p-2 rounded hover:bg-blue-600 transition">
+                    Download Song
+                </button>
+            </div>
+            <div id="songStatus" class="status"></div>
+        </div>
+
+        <div class="section bg-white shadow-sm">
+            <h2 class="text-xl font-semibold mb-4">Tracklist Download</h2>
+            <div class="input-group">
+                <textarea id="tracklistInput" placeholder="Enter tracklist (one song per line)" 
+                          class="w-full p-2 border rounded mb-2 h-32"></textarea>
+                <button onclick="downloadTracklist()" 
+                        class="w-full bg-blue-500 text-white p-2 rounded hover:bg-blue-600 transition">
+                    Download Tracklist
+                </button>
+            </div>
+            <div id="tracklistStatus" class="status"></div>
+        </div>
+
+        <div class="section bg-white shadow-sm">
+            <h2 class="text-xl font-semibold mb-4">Playlist Download</h2>
+            <div class="input-group">
+                <input type="text" id="playlistInput" placeholder="Enter playlist URL" 
+                       class="w-full p-2 border rounded mb-2">
+                <button onclick="downloadPlaylist()" 
+                        class="w-full bg-blue-500 text-white p-2 rounded hover:bg-blue-600 transition">
+                    Download Playlist
+                </button>
+            </div>
+            <div id="playlistStatus" class="status"></div>
+        </div>
+    </div>
+
+    <script>
+        // Create React element
+        const DownloadProgress = () => {
+            const [progress, setProgress] = React.useState({
+                current_task: null,
+                total_songs: 0,
+                completed_songs: 0,
+                current_song: '',
+                status: 'idle'
+            });
+
+            React.useEffect(() => {
+                const checkProgress = () => {
+                    fetch('/progress')
+                        .then(response => response.json())
+                        .then(data => setProgress(data))
+                        .catch(error => console.error('Error fetching progress:', error));
+                };
+
+                const interval = setInterval(() => {
+                    if (progress.status !== 'idle' && progress.status !== 'completed' && progress.status !== 'error') {
+                        checkProgress();
+                    }
+                }, 1000);
+
+                return () => clearInterval(interval);
+            }, [progress.status]);
+
+            if (progress.status === 'idle') {
+                return null;
+            }
+
+            const getProgressWidth = () => {
+                if (progress.total_songs === 0) return 0;
+                return (progress.completed_songs / progress.total_songs) * 100;
+            };
+
+            const getStatusColor = () => {
+                switch (progress.status) {
+                    case 'completed': return 'bg-green-100 border-green-500 text-green-700';
+                    case 'error': return 'bg-red-100 border-red-500 text-red-700';
+                    default: return 'bg-blue-100 border-blue-500 text-blue-700';
+                }
+            };
+
+            return React.createElement('div', {
+                className: `fixed bottom-4 right-4 p-4 rounded-lg shadow-lg ${getStatusColor()} border max-w-md`
+            }, [
+                React.createElement('div', { 
+                    className: 'font-semibold mb-2',
+                    key: 'title'
+                }, progress.current_task === 'single' ? 'Downloading Song' : 'Processing Tracklist'),
+                React.createElement('div', { 
+                    className: 'mb-2',
+                    key: 'details'
+                }, progress.current_song || `Processing ${progress.completed_songs}/${progress.total_songs} songs`),
+                React.createElement('div', {
+                    className: 'w-full bg-gray-200 rounded-full h-2.5',
+                    key: 'progress-bar'
+                }, React.createElement('div', {
+                    className: `h-full rounded-full transition-all duration-500 ${
+                        progress.status === 'completed' ? 'bg-green-500' :
+                        progress.status === 'error' ? 'bg-red-500' : 'bg-blue-500'
+                    }`,
+                    style: { width: `${getProgressWidth()}%` }
+                }))
+            ]);
+        };
+
+        // Mount React component
+        ReactDOM.render(
+            React.createElement(DownloadProgress),
+            document.getElementById('app')
+        );
+
+        async function downloadSong() {
+            const songInput = document.getElementById('songInput');
+            const statusDiv = document.getElementById('songStatus');
+            
+            try {
+                const response = await fetch('/download_song', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        song_name: songInput.value,
+                        download_dir: 'downloads'
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    statusDiv.textContent = 'Download completed successfully!';
+                    statusDiv.className = 'status bg-green-100 text-green-700 p-3 rounded';
+                } else {
+                    statusDiv.textContent = `Error: ${data.error}`;
+                    statusDiv.className = 'status bg-red-100 text-red-700 p-3 rounded';
+                }
+            } catch (error) {
+                statusDiv.textContent = `Error: ${error.message}`;
+                statusDiv.className = 'status bg-red-100 text-red-700 p-3 rounded';
+            }
+        }
+
+        async function downloadTracklist() {
+            const tracklistInput = document.getElementById('tracklistInput');
+            const statusDiv = document.getElementById('tracklistStatus');
+            
+            try {
+                const response = await fetch('/download_tracklist', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        tracklist: tracklistInput.value,
+                        download_dir: 'downloads'
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    statusDiv.textContent = 'Tracklist download completed successfully!';
+                    statusDiv.className = 'status bg-green-100 text-green-700 p-3 rounded';
+                } else {
+                    statusDiv.textContent = `Error: ${data.error}`;
+                    statusDiv.className = 'status bg-red-100 text-red-700 p-3 rounded';
+                }
+            } catch (error) {
+                statusDiv.textContent = `Error: ${error.message}`;
+                statusDiv.className = 'status bg-red-100 text-red-700 p-3 rounded';
+            }
+        }
+
+        async function downloadPlaylist() {
+            const playlistInput = document.getElementById('playlistInput');
+            const statusDiv = document.getElementById('playlistStatus');
+            
+            try {
+                const response = await fetch('/download_playlist', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        playlist_url: playlistInput.value,
+                        download_dir: 'downloads'
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    statusDiv.textContent = 'Playlist download completed successfully!';
+                    statusDiv.className = 'status bg-green-100 text-green-700 p-3 rounded';
+                } else {
+                    statusDiv.textContent = `Error: ${data.error}`;
+                    statusDiv.className = 'status bg-red-100 text-red-700 p-3 rounded';
+                }
+            } catch (error) {
+                statusDiv.textContent = `Error: ${error.message}`;
+                statusDiv.className = 'status bg-red-100 text-red-700 p-3 rounded';
+            }
+        }
+    </script>
+</body>
+</html>
